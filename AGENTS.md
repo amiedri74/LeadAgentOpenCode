@@ -83,11 +83,16 @@ systemctl --user status leadagent-daily.timer
 - **Timer**: `~/.config/systemd/user/leadagent-daily.timer` (daily ~00:19 PDT ±30min, `Persistent=true`)
 - **User linger**: Enabled (`loginctl enable-linger $USER`)
 
+## GitHub
+- **Remote**: `https://github.com/amiedri74/LeadAgentOpenCode`
+- Push after any significant change: `git add -A && git commit -m "..." && git push`
+
 ## Next Steps (Priority)
-1. Create AGENTS.md ✓
+1. AGENTS.md ✓
 2. React/Next.js dashboard with WebSocket real-time feed
 3. Rotating residential proxies for Google Maps scraper
 4. Contact dedup merging (not just reporting)
+5. Set up SendGrid API key and enable live outreach (`scripts/send_outreach.py --send`)
 
 ## Testing
 No formal test suite. Verify via:
