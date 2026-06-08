@@ -2,7 +2,7 @@
 
 ## Project Overview
 Autonomous AI lead generation system for Amy Electric (Los Angeles electrical contractor).
-- **Target**: 20+ leads/month | **Current**: 293 leads (201 LADBS, 92 Google Maps)
+- **Target**: 20+ leads/month | **Current**: 528 leads (201 LADBS, 327 Google Maps)
 - **Stack**: Python FastAPI, PostgreSQL 16, Redis 7, Docker, Playwright, Ollama (llama3.2:latest)
 - **Sources**: LADBS SODA API (frozen May 2023), Google Maps (Playwright + stealth), Website contact scraping
 
@@ -70,7 +70,7 @@ systemctl --user status leadagent-daily.timer
 | Source | Count | Key Fields |
 |--------|-------|------------|
 | LADBS | 201 | permit_number, estimated_cost, permit_type, contractor_name |
-| Google Maps | 92 | company_name, phone, website, address, zip_code |
+| Google Maps | 327 | company_name, phone, website, address, zip_code |
 
 **Scoring (0-100)**: Category (30) + Urgency (20) + Zip Tier (15) + Permit Type (15) + Cost (20)
 - EV Charger max: 70 | Commercial max: 60
@@ -81,7 +81,7 @@ systemctl --user status leadagent-daily.timer
 - **Method**: curl subprocess (300s timeout) with `options.num_predict` for token limits
 - **Status tracking**: `extra_data.outreach` JSON field
 - **Dry-run default**: `python3 scripts/send_outreach.py` | Live: add `--send`
-- **Emails**: 40 with clean emails, 79 high-value (score ≥ 50)
+- **Emails**: ~40 with clean emails, 79 high-value (score ≥ 50)
 
 ## Systemd Daily Timer
 - **Service**: `~/.config/systemd/user/leadagent-daily.service`
@@ -96,7 +96,7 @@ systemctl --user status leadagent-daily.timer
 1. Set up SendGrid API key (`SENDGRID_API_KEY` env var) and enable live email sending (`scripts/send_outreach.py --send`)
 2. Rotating residential proxies for Google Maps scraper to bypass rate limits
 3. Merge dedup groups (especially Imperial Solar affiliates — 6 leads sharing same email/website, but likely separate businesses using a shared CRM)
-4. Expand Maps search terms for more leads beyond current 92
+4. Full enrichment of all 327 Google Maps leads (website scraping takes ~30 min for 254 leads)
 
 ## Testing
 No formal test suite. Verify via:
