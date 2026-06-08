@@ -1,11 +1,15 @@
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "qwen3:8b"
 MAX_BATCH = 20
+
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+SENDGRID_FROM = os.environ.get("SENDGRID_FROM_EMAIL", "")
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +79,33 @@ Write 3 short paragraphs: intro, value prop with the service mentioned naturally
 
 
 async def send_email(to_email: str, subject: str, body: str) -> bool:
-    logger.info(f"[DRY-RUN] To: {to_email} | Subject: {subject}")
-    return True
+    if not SENDGRID_API_KEY:
+        logger.info(f"[DRY-RUN] To: {to_email} | Subject: {subject}")
+        return True
+
+    payload = {
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "from": {"email": SENDGRID_FROM or "amy@amyelectric.com", "name": "Amy Electric"},
+        "subject": subject,
+        "content": [{"type": "text/plain", "value": body}],
+    }
+
+    proc = await asyncio.create_subprocess_exec(
+        "curl", "-s", "-X", "POST",
+        "https://api.sendgrid.com/v3/mail/send",
+        "-H", f"Authorization: Bearer {SENDGRID_API_KEY}",
+        "-H", "Content-Type: application/json",
+        "-d", json.dumps(payload),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+    ok = proc.returncode == 0
+    if ok:
+        logger.info(f"[SENT] To: {to_email} | Subject: {subject}")
+    else:
+        logger.error(f"[FAIL] To: {to_email} | {stdout.decode()[:200]}")
+    return ok
 
 
 async def run_outreach(dry_run: bool = True, max_leads: int = MAX_BATCH):

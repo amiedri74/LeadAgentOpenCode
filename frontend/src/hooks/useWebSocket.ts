@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
-interface Lead {
+export interface Lead {
   id: string;
   company_name: string;
   service_category: string;
@@ -15,103 +15,116 @@ interface Lead {
   website: string;
   source: string;
   is_high_value: boolean;
+  contact_name: string | null;
+  estimated_cost: number | null;
+  created_at: string | null;
 }
 
-interface Stats {
+export interface Stats {
   total_leads: number;
   high_value_leads: number;
   by_category: Record<string, number>;
 }
 
-interface WebSocketMessage {
-  type: "stats" | "lead_added" | "lead_updated" | "lead_deleted" | "workflow_status";
-  payload: any;
+const CAT_LABELS: Record<string, string> = {
+  ev_charger: "EV Charger",
+  commercial_electrical: "Commercial",
+  general_electrical: "General",
+  solar_electrical: "Solar",
+  generator: "Generator",
+  lighting: "Lighting",
+};
+
+export function categoryLabel(cat: string): string {
+  return CAT_LABELS[cat] || cat;
 }
 
-export function useWebSocket(url: string) {
+const CAT_COLORS: Record<string, string> = {
+  ev_charger: "text-yellow-400",
+  commercial_electrical: "text-blue-400",
+  general_electrical: "text-gray-400",
+  solar_electrical: "text-orange-400",
+  generator: "text-purple-400",
+  lighting: "text-green-400",
+};
+
+export function categoryColor(cat: string): string {
+  return CAT_COLORS[cat] || "text-gray-400";
+}
+
+const WS_BASE = typeof window !== "undefined"
+  ? (window.location.protocol === "https:" ? "wss:" : "ws:") + "//" + window.location.hostname + ":8000"
+  : "ws://localhost:8000";
+
+export function useWebSocket() {
   const [isConnected, setIsConnected] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const messageHandlersRef = useRef<Map<string, (payload: any) => void>>(new Map());
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const connect = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
     try {
-      const ws = new WebSocket(url);
+      const ws = new WebSocket(`${WS_BASE}/ws`);
       wsRef.current = ws;
 
-      ws.onopen = () => {
-        setIsConnected(true);
-        console.log("WebSocket connected");
-      };
+      ws.onopen = () => setIsConnected(true);
 
       ws.onmessage = (event) => {
         try {
-          const message: WebSocketMessage = JSON.parse(event.data);
+          const msg = JSON.parse(event.data);
           setLastUpdate(new Date());
 
-          switch (message.type) {
-            case "stats":
-              setStats(message.payload);
-              break;
-            case "lead_added":
-              setLeads((prev) => [message.payload, ...prev].slice(0, 100));
-              break;
-            case "lead_updated":
-              setLeads((prev) =>
-                prev.map((l) => (l.id === message.payload.id ? message.payload : l))
-              );
-              break;
-            case "lead_deleted":
-              setLeads((prev) => prev.filter((l) => l.id !== message.payload.id));
-              break;
-            case "workflow_status":
-              console.log("Workflow status:", message.payload);
-              break;
+          if (msg.type === "stats") {
+            setStats(msg.payload);
           }
-
-          const handler = messageHandlersRef.current.get(message.type);
-          if (handler) handler(message.payload);
-        } catch (e) {
-          console.error("Failed to parse WebSocket message:", e);
+        } catch {
+          /* ignore parse errors */
         }
       };
 
       ws.onclose = () => {
         setIsConnected(false);
-        console.log("WebSocket disconnected, reconnecting in 5s...");
-        reconnectTimeoutRef.current = setTimeout(connect, 5000);
+        reconnectRef.current = setTimeout(connect, 3000);
       };
 
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
+      ws.onerror = () => {
+        ws.close();
       };
-    } catch (e) {
-      console.error("Failed to create WebSocket:", e);
-      reconnectTimeoutRef.current = setTimeout(connect, 5000);
+    } catch {
+      reconnectRef.current = setTimeout(connect, 3000);
     }
-  }, [url]);
+  }, []);
 
   useEffect(() => {
     connect();
     return () => {
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (wsRef.current) wsRef.current.close();
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
+      wsRef.current?.close();
     };
   }, [connect]);
 
-  const sendMessage = useCallback((type: string, payload: any) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type, payload }));
+  const loadLeads = useCallback(async (opts?: {
+    category?: string;
+    minScore?: number;
+    limit?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (opts?.category) params.set("category", opts.category);
+    if (opts?.minScore) params.set("min_score", String(opts.minScore));
+    params.set("limit", String(opts?.limit ?? 50));
+
+    try {
+      const r = await fetch(`/api/leads?${params}`);
+      const data = await r.json();
+      if (data.leads) setLeads(data.leads);
+    } catch {
+      /* ignore */
     }
   }, []);
 
-  const onMessage = useCallback((type: string, handler: (payload: any) => void) => {
-    messageHandlersRef.current.set(type, handler);
-    return () => messageHandlersRef.current.delete(type);
-  }, []);
-
-  return { isConnected, stats, leads, lastUpdate, sendMessage, onMessage };
+  return { isConnected, stats, leads, lastUpdate, loadLeads };
 }

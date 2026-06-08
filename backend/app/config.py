@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "qwen3:8b"
     hunter_api_key: str = ""
+    sendgrid_api_key: str = ""
+    sendgrid_from_email: str = ""
     permit_api_base: str = "https://data.lacity.org/resource/hbkd-qubn.json"
     app_name: str = "Amy Electric Lead Agent"
     debug: bool = True
