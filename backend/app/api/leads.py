@@ -75,6 +75,7 @@ def serialize_lead(lead):
         "contact_name": lead.contact_name,
         "email": lead.email,
         "phone": lead.phone,
+        "website": lead.website,
         "address": lead.address,
         "city": lead.city,
         "zip_code": lead.zip_code,

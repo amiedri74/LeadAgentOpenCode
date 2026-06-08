@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database.session import init_db, engine
-from app.api import leads, dashboard, scrape, ws
+from app.api import leads, dashboard, scrape, ws, contacts
 
 
 @asynccontextmanager
@@ -31,6 +31,7 @@ app.include_router(leads.router, prefix="/api/leads", tags=["leads"])
 app.include_router(scrape.router, prefix="/api/scrape", tags=["scrape"])
 app.include_router(dashboard.router, prefix="", tags=["dashboard"])
 app.include_router(ws.router, prefix="", tags=["websocket"])
+app.include_router(contacts.router, prefix="", tags=["contacts"])
 
 
 @app.get("/api/health")
