@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timezone
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL = "qwen3:8b"
+OLLAMA_MODEL = "llama3.2:latest"
 MAX_BATCH = 20
 
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
@@ -35,8 +35,10 @@ async def _ollama_generate(prompt: str, max_tokens: int = 300) -> str:
             "model": OLLAMA_MODEL,
             "prompt": prompt,
             "stream": False,
-            "temperature": 0.7,
-            "max_tokens": max_tokens,
+            "options": {
+                "temperature": 0.7,
+                "num_predict": max_tokens,
+            },
         }),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,

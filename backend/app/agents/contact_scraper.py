@@ -1,11 +1,22 @@
+import logging
 import re
 import httpx
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 
+logger = logging.getLogger(__name__)
+
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 PHONE_RE = re.compile(r"\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}")
 CONTACT_KEYWORDS = ["contact", "about", "team", "support", "help", "get-in-touch", "contact-us", "about-us"]
+
+_KNOWN_BAD_EMAIL_PATTERNS = re.compile(
+    r"^[%@\s]|%[0-9a-fA-F]{2}|\.(png|jpg|gif|svg|jpeg)$|"
+    r"(Call|Fax|Phone|Tel|Email|Web|Home|Team|Info)$|"
+    r"^(contact|hello|support|admin|sales|team|noreply|no-reply|info)@\w*\.\w+$"
+)
+
+_EMAIL_USERNAME_BLACKLIST = {"contact", "hello", "support", "admin", "sales", "team", "noreply", "no-reply", "info", "mail", "inquiries"}
 
 
 async def scrape_website(url: str) -> dict:
@@ -32,9 +43,11 @@ async def scrape_website(url: str) -> dict:
             try:
                 resp = await client.get(page_url)
                 if resp.status_code != 200:
+                    logger.debug("HTTP %d for %s", resp.status_code, page_url)
                     continue
                 html = resp.text
-            except Exception:
+            except Exception as exc:
+                logger.debug("Failed to fetch %s: %s", page_url, exc)
                 continue
 
             soup = BeautifulSoup(html, "html.parser")
@@ -61,7 +74,10 @@ async def scrape_website(url: str) -> dict:
             for match in PHONE_RE.findall(body):
                 found_phones.add(match)
 
-    email = next((e for e in found_emails if not e.endswith((".png", ".jpg", ".gif", ".svg"))), "")
+    valid = [e for e in found_emails if not _KNOWN_BAD_EMAIL_PATTERNS.search(e)]
+    email = next((e for e in valid if e.split("@")[0].lower() not in _EMAIL_USERNAME_BLACKLIST), "")
+    if not email:
+        email = next(iter(valid), "")
     phone = next((p for p in found_phones), "")
 
     contact_name = ""

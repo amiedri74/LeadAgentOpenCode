@@ -30,7 +30,8 @@ async def enrich_contacts():
     failed = 0
     changed_leads = []
 
-    for lead in leads:
+    for i, lead in enumerate(leads, 1):
+        print(f"[{i}/{len(leads)}] {lead.company_name or lead.website}...", end=" ", flush=True)
         try:
             info = await scrape_website(lead.website)
             changed = False
@@ -60,8 +61,12 @@ async def enrich_contacts():
             if changed:
                 updated += 1
                 changed_leads.append(lead)
+                print("updated")
+            else:
+                print("no change")
 
         except Exception as e:
+            print(f"error: {e}")
             failed += 1
 
     async with async_session() as db:

@@ -2,8 +2,8 @@
 
 ## Project Overview
 Autonomous AI lead generation system for Amy Electric (Los Angeles electrical contractor).
-- **Target**: 20+ leads/month | **Current**: 275 leads (201 LADBS permits, 74 Google Maps)
-- **Stack**: Python FastAPI, PostgreSQL 16, Redis 7, Docker, Playwright, Ollama (qwen3:8b)
+- **Target**: 20+ leads/month | **Current**: 293 leads (201 LADBS, 92 Google Maps)
+- **Stack**: Python FastAPI, PostgreSQL 16, Redis 7, Docker, Playwright, Ollama (llama3.2:latest)
 - **Sources**: LADBS SODA API (frozen May 2023), Google Maps (Playwright + stealth), Website contact scraping
 
 ## Quick Commands
@@ -41,13 +41,14 @@ systemctl --user status leadagent-daily.timer
 | `backend/app/agents/maps_scraper.py` | Google Maps scraper (Playwright + stealth) |
 | `backend/app/agents/contact_scraper.py` | Website contact extractor (httpx + BS4) |
 | `backend/app/scoring/engine.py` | Weighted scoring (0-100) |
-| `backend/app/outreach/engine.py` | Ollama email generation (curl subprocess) |
+| `backend/app/outreach/engine.py` | Ollama email generation (curl subprocess + options.num_predict) |
 | `backend/scripts/daily_workflow.py` | Main daily pipeline |
 | `backend/scripts/maps_pipeline.py` | Maps-only pipeline |
-| `backend/scripts/enrich_contacts.py` | Contact enrichment |
+| `backend/scripts/enrich_contacts.py` | Contact enrichment (with progress logging) |
 | `backend/scripts/send_outreach.py` | Outreach CLI |
 | `docker-compose.yml` | PostgreSQL + Redis + backend |
 | `nginx/default.conf` | Reverse proxy config |
+| `frontend/` | Next.js dashboard with WebSocket live feed |
 
 ## Database
 - **URL**: `postgresql+asyncpg://leadagent:leadagent_secret_2026@localhost:5433/leadagent`
@@ -55,28 +56,32 @@ systemctl --user status leadagent-daily.timer
 - **Port**: 5433 (Docker), 5432 is system postgres (inaccessible)
 
 ## Critical Gotchas
-1. **Ollama qwen3:8b runner gets stuck** (307% CPU, 5.8GB RSS) → Fix: `sudo kill -9 $(pgrep -f "ollama runner")` then wait ~10s
-2. **httpx times out on Ollama** → Use `asyncio.create_subprocess_exec("curl", ...)` with 300s timeout
-3. **Google Maps deduplicates by company_name only** (not name+address)
-4. **LADBS dataset frozen at May 2023** — no real-time permits
-5. **EPIPE errors from Playwright** are harmless stderr noise
-6. **Phone format already consistent**: `(XXX) XXX-XXXX`
+1. **Ollama runner gets stuck** (307% CPU, 5.8GB RSS on qwen3:8b) → Switched to llama3.2:latest (3.2B, works reliably). Fix: `sudo kill -9 $(pgrep -f "ollama runner")` then wait ~15s
+2. **Ollama API: use `options.num_predict` NOT `max_tokens`** — top-level `max_tokens` is ignored silently. Always nest token count/temperature in `options` dict
+3. **httpx times out on Ollama** → Use `asyncio.create_subprocess_exec("curl", ...)` with 300s timeout
+4. **Google Maps deduplicates by company_name only** (not name+address)
+5. **LADBS dataset frozen at May 2023** — no real-time permits
+6. **EPIPE errors from Playwright** are harmless stderr noise
+7. **Phone format already consistent**: `(XXX) XXX-XXXX`
+8. **Contact scraper email validation**: Reject emails with URL encoding (`%XX`), trailing words (`.comCall`, `.comWe`), dotfiles (`.png`, `.jpg`), and rotated/obfuscated addresses. Enrichment script now has visible progress logging per lead
+9. **socket.io-client NOT used** — frontend uses native WebSocket API directly; remove socket.io-client from package.json if present
 
 ## Lead Sources & Scoring
 | Source | Count | Key Fields |
 |--------|-------|------------|
 | LADBS | 201 | permit_number, estimated_cost, permit_type, contractor_name |
-| Google Maps | 74 | company_name, phone, website, address, zip_code |
+| Google Maps | 92 | company_name, phone, website, address, zip_code |
 
 **Scoring (0-100)**: Category (30) + Urgency (20) + Zip Tier (15) + Permit Type (15) + Cost (20)
 - EV Charger max: 70 | Commercial max: 60
 - High-value threshold: ≥50
 
 ## Outreach
-- **Model**: qwen3:8b via Ollama (localhost:11434)
-- **Method**: curl subprocess (300s timeout) — avoids httpx timeout issues
+- **Model**: llama3.2:latest via Ollama (localhost:11434) — switched from qwen3:8b (kept getting stuck)
+- **Method**: curl subprocess (300s timeout) with `options.num_predict` for token limits
 - **Status tracking**: `extra_data.outreach` JSON field
 - **Dry-run default**: `python3 scripts/send_outreach.py` | Live: add `--send`
+- **Emails**: 40 with clean emails, 79 high-value (score ≥ 50)
 
 ## Systemd Daily Timer
 - **Service**: `~/.config/systemd/user/leadagent-daily.service`
@@ -88,14 +93,14 @@ systemctl --user status leadagent-daily.timer
 - Push after any significant change: `git add -A && git commit -m "..." && git push`
 
 ## Next Steps (Priority)
-1. AGENTS.md ✓
-2. React/Next.js dashboard with WebSocket real-time feed
-3. Rotating residential proxies for Google Maps scraper
-4. Contact dedup merging (not just reporting)
-5. Set up SendGrid API key and enable live outreach (`scripts/send_outreach.py --send`)
+1. Set up SendGrid API key (`SENDGRID_API_KEY` env var) and enable live email sending (`scripts/send_outreach.py --send`)
+2. Rotating residential proxies for Google Maps scraper to bypass rate limits
+3. Merge dedup groups (especially Imperial Solar affiliates — 6 leads sharing same email/website, but likely separate businesses using a shared CRM)
+4. Expand Maps search terms for more leads beyond current 92
 
 ## Testing
 No formal test suite. Verify via:
 - `python3 scripts/daily_workflow.py --maps` (end-to-end)
 - Dashboard at `http://localhost:8000/dashboard`
 - `curl http://localhost:8000/api/leads/stats`
+- `cd frontend && npm run build` (Next.js build check)
