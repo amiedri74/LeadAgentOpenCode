@@ -1,9 +1,17 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.database.session import init_db, engine
+from app.database.session import init_db, engine, async_session
+from app.database.models import Lead
 from app.api import leads, dashboard, scrape, ws, contacts
+from app.rag import router as rag_router
+from app.rag import memory
+from sqlalchemy import select
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -11,8 +19,21 @@ async def lifespan(app: FastAPI):
     try:
         await init_db()
     except Exception as e:
-        print(f"Database init failed: {e}")
+        logger.error("Database init failed: %s", e)
         raise
+
+    try:
+        async with async_session() as db:
+            result = await db.execute(select(Lead).limit(1))
+            has_leads = result.first() is not None
+        if has_leads:
+            async with async_session() as db:
+                result = await db.execute(select(Lead))
+                leads_list = result.scalars().all()
+            asyncio.create_task(memory.build_index_async(leads_list))
+    except Exception as e:
+        logger.warning("RAG index build deferred: %s", e)
+
     yield
     await engine.dispose()
 
@@ -32,6 +53,7 @@ app.include_router(scrape.router, prefix="/api/scrape", tags=["scrape"])
 app.include_router(dashboard.router, prefix="", tags=["dashboard"])
 app.include_router(ws.router, prefix="", tags=["websocket"])
 app.include_router(contacts.router, prefix="", tags=["contacts"])
+app.include_router(rag_router.router)
 
 
 @app.get("/api/health")

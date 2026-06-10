@@ -129,7 +129,12 @@ tailwind.config = { theme: { extend: { colors: { gray: { 750: '#2d3748' } } } } 
                     <span class="badge" :class="catClass(l.service_category)" x-text="catLabel(l.service_category)"></span>
                   </td>
                   <td>
-                    <span class="badge" :class="l.source==='ladbs_permit' ? 'bg-blue-900/50 text-blue-300' : 'bg-purple-900/50 text-purple-300'" x-text="l.source==='ladbs_permit' ? 'LADBS' : 'Maps'"></span>
+                    <template x-if="l.source_url">
+                      <a :href="l.source_url" target="_blank" class="badge" :class="l.source==='ladbs_permit' ? 'bg-blue-900/50 text-blue-300 hover:bg-blue-800/50' : 'bg-purple-900/50 text-purple-300 hover:bg-purple-800/50'" x-text="l.source==='ladbs_permit' ? 'LADBS ↗' : 'Maps ↗'"></a>
+                    </template>
+                    <template x-if="!l.source_url">
+                      <span class="badge" :class="l.source==='ladbs_permit' ? 'bg-blue-900/50 text-blue-300' : 'bg-purple-900/50 text-purple-300'" x-text="l.source==='ladbs_permit' ? 'LADBS' : 'Maps'"></span>
+                    </template>
                   </td>
                   <td>
                     <span class="text-gray-300" x-text="l.contact_name || '-'"></span>
@@ -236,7 +241,7 @@ function app() {
         } catch(_) {}
       };
 
-      fetch('/api/leads?limit=300').then(r => r.json()).then(d => {
+      fetch('/api/leads?limit=600').then(r => r.json()).then(d => {
         this.leads = d.leads || [];
         this.total = d.total || this.leads.length;
       });

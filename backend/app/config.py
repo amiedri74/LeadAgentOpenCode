@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://leadagent:leadagent_secret_2026@localhost:5433/leadagent"
     redis_url: str = "redis://localhost:6379/0"
     ollama_url: str = "http://localhost:11434"
-    ollama_model: str = "qwen3:8b"
+    ollama_model: str = "llama3.2:latest"
     hunter_api_key: str = ""
     sendgrid_api_key: str = ""
     sendgrid_from_email: str = ""

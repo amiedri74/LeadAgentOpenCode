@@ -34,6 +34,7 @@ async def daily_workflow(include_maps: bool = False):
             zip_code=lead_data.get("zip_code", ""),
             estimated_cost=float(lead_data.get("estimated_cost", 0) or 0),
             permit_type=lead_data.get("permit_type", ""),
+            company_name=lead_data.get("company_name", ""),
         )
         lead_data["score"] = score
         lead_data["is_high_value"] = score >= 50
@@ -73,6 +74,9 @@ async def daily_workflow(include_maps: bool = False):
                     zip_code=item.get("zip_code", ""),
                     estimated_cost=0,
                     permit_type="",
+                    company_name=item.get("company_name", ""),
+                    has_phone=bool(item.get("phone")),
+                    has_website=bool(item.get("website")),
                 )
                 item["score"] = score
                 item["is_high_value"] = score >= 50

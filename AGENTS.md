@@ -15,6 +15,13 @@ docker start leadagentopencode-postgres-1 leadagentopencode-redis-1
 # Start API (systemd user service)
 systemd-run --user --unit=leadagent-api --working-directory=/home/amram/Downloads/LeadAgentOpenCode/backend python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 600
 
+# Start frontend (systemd user service) — runs on port 3000, proxies /api/* → localhost:8000
+systemd-run --user --unit=leadagent-frontend --working-directory=/home/amram/Downloads/LeadAgentOpenCode/frontend npx next dev --port 3000
+
+# Restart services after code changes
+systemctl --user restart leadagent-api
+systemctl --user restart leadagent-frontend
+
 # Run full daily workflow (LADBS + Maps + Enrichment)
 cd backend && python3 scripts/daily_workflow.py --maps
 
@@ -102,5 +109,6 @@ systemctl --user status leadagent-daily.timer
 No formal test suite. Verify via:
 - `python3 scripts/daily_workflow.py --maps` (end-to-end)
 - Dashboard at `http://localhost:8000/dashboard`
+- Frontend dashboard at `http://localhost:3000` (Next.js, table with search/filters/CSV)
 - `curl http://localhost:8000/api/leads/stats`
 - `cd frontend && npm run build` (Next.js build check)

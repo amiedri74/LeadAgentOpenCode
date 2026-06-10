@@ -41,3 +41,16 @@ docker-data/
 
 # Systemd user config (only relevant to this machine)
 # AGENTS.md is checked in, don't ignore it
+
+# RAG embeddings (generated)
+backend/data/
+*.npy
+
+# Test scripts
+quick_test.py
+setup_sendgrid.py
+test_sendgrid.py
+
+# External tool configs
+.gemini/
+GEMINI.md

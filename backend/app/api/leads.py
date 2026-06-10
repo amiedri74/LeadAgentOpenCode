@@ -12,7 +12,7 @@ router = APIRouter()
 @router.get("")
 async def list_leads(
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=1000),
     source: Optional[str] = None,
     category: Optional[str] = None,
     min_score: Optional[int] = None,
@@ -67,9 +67,18 @@ async def get_lead(lead_id: str, db: AsyncSession = Depends(get_db)):
 
 
 def serialize_lead(lead):
+    source_url = None
+    if lead.source == "google_maps" and lead.company_name:
+        parts = [lead.company_name, lead.zip_code, "Los Angeles"]
+        q = " ".join(p for p in parts if p)
+        source_url = f"https://www.google.com/maps/search/{q.replace(' ', '+')}"
+    elif lead.source == "ladbs_permit":
+        source_url = "https://www.ladbs.org/permits"
+
     return {
         "id": str(lead.id),
         "source": lead.source,
+        "source_url": source_url,
         "source_id": lead.source_id,
         "company_name": lead.company_name,
         "contact_name": lead.contact_name,

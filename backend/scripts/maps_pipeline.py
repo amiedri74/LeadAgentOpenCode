@@ -50,6 +50,9 @@ async def run_pipeline(enrich: bool = False):
                     zip_code=item.get("zip_code", ""),
                     estimated_cost=0,
                     permit_type="",
+                    company_name=item.get("company_name", ""),
+                    has_phone=bool(item.get("phone")),
+                    has_website=bool(item.get("website")),
                 )
                 item["score"] = score
                 item["is_high_value"] = score >= 50

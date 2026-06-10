@@ -1,6 +1,10 @@
 import re
+import logging
 from playwright.async_api import async_playwright, Page
 from playwright_stealth import Stealth
+from app.scoring.engine import calculate_score, detect_category_from_name
+
+logger = logging.getLogger(__name__)
 
 SEARCH_TERMS = [
     "property management Los Angeles",
@@ -41,6 +45,62 @@ SEARCH_TERMS = [
     "property manager Glendale",
     "property manager Pasadena",
     "property manager Burbank",
+    "electrical contractor North Hollywood",
+    "electrical contractor Van Nuys",
+    "electrical contractor Reseda",
+    "electrical contractor Chatsworth",
+    "electrical contractor Northridge",
+    "electrical contractor Canoga Park",
+    "electrical contractor Winnetka",
+    "electrical contractor Granada Hills",
+    "electrical contractor Porter Ranch",
+    "electrical contractor Studio City",
+    "electrical contractor Valley Village",
+    "electrical contractor Toluca Lake",
+    "electrical contractor West Hills",
+    "electrical contractor Agoura Hills",
+    "electrical contractor Hidden Hills",
+    "electrical contractor West Hollywood",
+    "electrical contractor Culver City",
+    "electrical contractor Marina del Rey",
+    "electrical contractor Venice",
+    "electrical contractor Playa Vista",
+    "electrical contractor El Segundo",
+    "electrical contractor Hawthorne",
+    "data cabling contractor Los Angeles",
+    "network cabling installer Los Angeles",
+    "home automation Los Angeles",
+    "security system installer Los Angeles",
+    "fire alarm contractor Los Angeles",
+    "backup generator Los Angeles",
+    "UPS battery backup Los Angeles",
+    "restaurant electrical contractor Los Angeles",
+    "commercial electrical maintenance Los Angeles",
+    "office electrical contractor Los Angeles",
+    "retail electrical contractor Los Angeles",
+    "warehouse electrical contractor Los Angeles",
+    "new construction electrician Los Angeles",
+    "tenant improvement electrician Los Angeles",
+    "HOA property management Los Angeles",
+    "commercial property management Los Angeles",
+    "property manager Woodland Hills",
+    "property manager Sherman Oaks",
+    "property manager Encino",
+    "property manager Calabasas",
+    "property manager Beverly Hills",
+    "property manager Los Feliz",
+    "property manager Silver Lake",
+    "property manager West Hollywood",
+    "property manager Culver City",
+    "general contractor Glendale",
+    "general contractor Pasadena",
+    "general contractor Santa Monica",
+    "general contractor Beverly Hills",
+    "remodeling contractor Glendale",
+    "remodeling contractor Pasadena",
+    "home renovation Santa Monica",
+    "home renovation Beverly Hills",
+    "home renovation Woodland Hills",
 ]
 
 
@@ -120,13 +180,13 @@ async def scrape_google_maps() -> list[dict]:
             try:
                 leads = await _scrape_term(browser, stealth_obj, term, seen)
                 all_leads.extend(leads)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Search term %r failed: %s", term, e)
 
         try:
             await browser.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("browser.close() failed: %s", e)
 
     return all_leads
 
@@ -149,7 +209,7 @@ async def _scrape_term(browser, stealth_obj, term: str, seen: set) -> list[dict]
         await ctx.close()
         return leads
 
-    await page.wait_for_timeout(4000)
+    await page.wait_for_timeout(2000)
 
     articles = page.locator("div[role=\"article\"]")
     try:
@@ -168,16 +228,30 @@ async def _scrape_term(browser, stealth_obj, term: str, seen: set) -> list[dict]
             seen.add(parsed["name"])
 
             await art.click()
-            await page.wait_for_timeout(1500)
+            await page.wait_for_timeout(800)
 
             website = ""
             try:
                 ws = page.locator('a[data-tooltip="Open website"]').first
-                href = await ws.get_attribute("href", timeout=3000)
+                href = await ws.get_attribute("href", timeout=2000)
                 if href and "maps.google" not in href and not href.startswith("javascript"):
                     website = href
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Website fetch failed for %s: %s", parsed.get("name", "?"), e)
+
+            detected_cat = detect_category_from_name(parsed["name"]) or "general_electrical"
+
+            score = calculate_score(
+                service_category=detected_cat,
+                urgency="medium",
+                zip_code=parsed["zip_code"],
+                estimated_cost=0,
+                permit_type="",
+                company_name=parsed["name"],
+                has_phone=bool(parsed["phone"]),
+                has_email=False,
+                has_website=bool(website),
+            )
 
             leads.append({
                 "source": "google_maps",
@@ -187,12 +261,13 @@ async def _scrape_term(browser, stealth_obj, term: str, seen: set) -> list[dict]
                 "phone": parsed["phone"],
                 "address": parsed["address"],
                 "zip_code": parsed["zip_code"],
-                "service_category": "general_electrical",
+                "service_category": detected_cat,
                 "urgency": "medium",
-                "score": 40,
-                "is_high_value": False,
+                "score": score,
+                "is_high_value": score >= 50,
             })
-        except Exception:
+        except Exception as e:
+            logger.debug("Item %d scraping failed: %s", i, e)
             continue
 
     await page.close()
