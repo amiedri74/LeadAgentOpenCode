@@ -1,15 +1,16 @@
 import asyncio
 import json
 import logging
-import os
 from datetime import datetime, timezone
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL = "llama3.2:latest"
+from app.config import settings
+
+OLLAMA_URL = f"{settings.ollama_url}/api/generate"
+OLLAMA_MODEL = settings.ollama_model
 MAX_BATCH = 20
 
-SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
-SENDGRID_FROM = os.environ.get("SENDGRID_FROM_EMAIL", "")
+SENDGRID_API_KEY = settings.sendgrid_api_key
+SENDGRID_FROM = settings.sendgrid_from_email
 
 logger = logging.getLogger(__name__)
 

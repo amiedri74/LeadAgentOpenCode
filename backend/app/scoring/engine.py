@@ -31,6 +31,11 @@ CATEGORY_KEYWORDS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\blighting\b|\bchandelier\b|\brecessed\b|\blandscape\s+lighting\b|\boutdoor\s+lighting\b", re.I), "lighting"),
     (re.compile(r"\brewire\b|\bwiring\b|\bremodel\b|\brenovation\b", re.I), "rewiring"),
     (re.compile(r"\bdata\b|\bnetwork\b|\bcabling\b|\bfiber\b|\bstructured\s+cabling\b|\bcat6\b", re.I), "commercial_electrical"),
+    (re.compile(r"\belectrician\b|\belectrical\s+contractor\b|\belectrical\s+company\b|\belectrical\s+services\b", re.I), "commercial_electrical"),
+    (re.compile(r"\bhvac\b|\bheating\b|\bair\s+conditioning\b|\bac\b|\bheating\s+and\s+cooling\b", re.I), "commercial_electrical"),
+    (re.compile(r"\bproperty\s+management\b|\bproperty\s+manager\b|\bapartment\s+management\b|\bhoa\b", re.I), "commercial_electrical"),
+    (re.compile(r"\bcontractor\b|\bconstruction\b|\bbuilders\b|\bremodel\b|\brenovation\b|\bgeneral\s+contractor\b", re.I), "commercial_electrical"),
+    (re.compile(r"\bhandyman\b|\bhome\s+repair\b|\bmaintenance\b|\bhome\s+services\b", re.I), "panel_upgrade"),
 ]
 
 
@@ -53,6 +58,7 @@ def calculate_score(
     has_phone: bool = False,
     has_email: bool = False,
     has_website: bool = False,
+    source: str = "",
 ) -> int:
     score = 0
 
@@ -77,6 +83,9 @@ def calculate_score(
         score += 3
 
     if permit_type and permit_type.lower() == "electrical":
+        score += 15
+
+    if source == "google_maps":
         score += 15
 
     if has_phone:

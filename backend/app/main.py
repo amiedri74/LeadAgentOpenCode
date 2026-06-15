@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database.session import init_db, engine, async_session
 from app.database.models import Lead
-from app.api import leads, dashboard, scrape, ws, contacts
+from app.api import leads, dashboard, scrape, ws, contacts, outreach
 from app.rag import router as rag_router
 from app.rag import memory
 from sqlalchemy import select
@@ -53,6 +53,7 @@ app.include_router(scrape.router, prefix="/api/scrape", tags=["scrape"])
 app.include_router(dashboard.router, prefix="", tags=["dashboard"])
 app.include_router(ws.router, prefix="", tags=["websocket"])
 app.include_router(contacts.router, prefix="", tags=["contacts"])
+app.include_router(outreach.router, prefix="", tags=["outreach"])
 app.include_router(rag_router.router)
 
 

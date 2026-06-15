@@ -75,8 +75,8 @@ async def run_pipeline(enrich: bool = False):
                 )
                 db.add(lead)
                 saved += 1
-            except Exception:
-                pass
+            except Exception as e:
+                logging.getLogger(__name__).warning("Failed to save lead %s: %s", item.get("company_name"), e)
 
         await db.commit()
 

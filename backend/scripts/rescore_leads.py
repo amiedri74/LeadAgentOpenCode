@@ -30,6 +30,7 @@ async def rescore():
                 has_phone=bool(lead.phone),
                 has_email=bool(lead.email and "@" in lead.email),
                 has_website=bool(lead.website and lead.website.startswith("http")),
+                source=lead.source or "",
             )
 
             if new_score != lead.score:

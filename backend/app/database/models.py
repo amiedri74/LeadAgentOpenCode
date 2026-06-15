@@ -49,3 +49,20 @@ class Lead(Base):
         Index("idx_leads_is_high_value", "is_high_value"),
         Index("idx_leads_source_source_id", "source", "source_id"),
     )
+
+
+class OutreachDraft(Base):
+    __tablename__ = "outreach_drafts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    lead_id = Column(UUID(as_uuid=True), nullable=False)
+    status = Column(String(20), nullable=False, default="pending_review")
+    subject = Column(String(512))
+    body = Column(Text)
+    generated_at = Column(DateTime, default=_now)
+    updated_at = Column(DateTime, default=_now, onupdate=_now)
+
+    __table_args__ = (
+        Index("idx_drafts_status", "status"),
+        Index("idx_drafts_lead_id", "lead_id"),
+    )

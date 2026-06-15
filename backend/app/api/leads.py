@@ -24,7 +24,7 @@ async def list_leads(
         query = query.where(Lead.source == source)
     if category:
         query = query.where(Lead.service_category == category)
-    if min_score:
+    if min_score is not None:
         query = query.where(Lead.score >= min_score)
 
     total = await db.scalar(select(func.count()).select_from(query.subquery()))
@@ -88,8 +88,8 @@ def serialize_lead(lead):
         "address": lead.address,
         "city": lead.city,
         "zip_code": lead.zip_code,
-        "latitude": float(lead.latitude) if lead.latitude else None,
-        "longitude": float(lead.longitude) if lead.longitude else None,
+        "latitude": float(lead.latitude) if lead.latitude is not None else None,
+        "longitude": float(lead.longitude) if lead.longitude is not None else None,
         "permit_number": lead.permit_number,
         "permit_type": lead.permit_type,
         "project_description": lead.project_description,

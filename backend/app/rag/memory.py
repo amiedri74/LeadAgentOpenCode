@@ -52,9 +52,11 @@ def load_index() -> dict:
     if not os.path.exists(EMBED_PATH) or not os.path.exists(IDS_PATH):
         _embedding_cache = {"embeddings": np.zeros((0, EMBED_DIM)), "ids": []}
         return _embedding_cache
+    with open(IDS_PATH) as f:
+        ids = json.load(f)
     _embedding_cache = {
         "embeddings": np.load(EMBED_PATH),
-        "ids": json.load(open(IDS_PATH)),
+        "ids": ids,
     }
     return _embedding_cache
 
@@ -62,7 +64,8 @@ def load_index() -> dict:
 def save_index(embeddings: np.ndarray, ids: list[str]):
     os.makedirs(os.path.dirname(EMBED_PATH), exist_ok=True)
     np.save(EMBED_PATH, embeddings)
-    json.dump(ids, open(IDS_PATH, "w"))
+    with open(IDS_PATH, "w") as f:
+        json.dump(ids, f)
 
 
 async def build_index_async(db_leads: list, force: bool = False):
