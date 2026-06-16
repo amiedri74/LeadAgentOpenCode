@@ -1,0 +1,113 @@
+name: Dependabot Auto-Merge
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+  pull_request_target:
+    types:
+      - - opened
+      - - synchronize
+      - - reopened
+  check_suite:
+    types:
+      - completed
+  status: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: ${{ github.actor == 'dependabot[bot]' }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch full git history
+        run: git fetch --unshallow
+
+      - name: Wait for required checks to complete
+        uses: actions/github-script@v7
+        id: wait-for-checks
+        with:
+          script: |
+            const pullNumber = context.payload.pull_request.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Get the pull request details
+            const { data: pr } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pullNumber
+            });
+
+            // If PR is already merged or not mergeable, exit
+            if (pr.merged) {
+              console.log('PR is already merged');
+              return false;
+            }
+            if (pr.mergeable_state === 'unstable' || pr.mergeable_state === 'blocked') {
+              // Check if we should wait
+              const { data: checks } = await github.rest.checks.listForRef({
+                owner,
+                repo,
+                ref: pr.head.sha
+              });
+
+              // Get all statuses
+              const { data: statuses } = await github.rest.repos.listCommitStatusesForRef({
+                owner,
+                repo,
+                ref: pr.head.sha
+              });
+
+              const allChecks = [...checks.check_runs, ...statuses];
+              
+              // Check if there are any failed checks
+              const failedChecks = allChecks.filter(check => 
+                check.state === 'failure' || check.conclusion === 'failure'
+              );
+              
+              if (failedChecks.length > 0) {
+                console.log('Failed checks found:', failedChecks.map(c => c.name).join(', '));
+                return false;
+              }
+
+              // Check if all required checks have completed
+              const pendingChecks = allChecks.filter(check => 
+                check.state === 'pending' || check.conclusion === null
+              );
+              
+              if (pendingChecks.length > 0) {
+                console.log('Waiting for checks to complete:', pendingChecks.map(c => c.name).join(', '));
+                return false;
+              }
+            }
+
+            return true;
+
+      - name: Enable auto-merge for Dependabot PRs
+        if: steps.wait-for-checks.outputs.result == 'true'
+        run: |
+          gh pr merge --admin --merge "${{ github.event.pull_request.number }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on PR with merge status
+        if: steps.wait-for-checks.outputs.result == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '⏳ Waiting for all checks to pass before auto-merging...'
+            })
