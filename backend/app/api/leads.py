@@ -29,7 +29,16 @@ async def list_leads(
     if min_score is not None:
         query = query.where(Lead.score >= min_score)
 
-    total = await db.scalar(select(func.count()).select_from(query.subquery()))
+    # Count with same filters
+    count_query = select(func.count()).select_from(Lead)
+    if source:
+        count_query = count_query.where(Lead.source == source)
+    if category:
+        count_query = count_query.where(Lead.service_category == category)
+    if min_score is not None:
+        count_query = count_query.where(Lead.score >= min_score)
+    total = await db.scalar(count_query)
+
     result = await db.execute(query.order_by(desc(Lead.score)).offset(skip).limit(limit))
     leads = result.scalars().all()
 
@@ -43,7 +52,7 @@ async def lead_stats(
 ):
     total = await db.scalar(select(func.count()).select_from(Lead))
     high_value = await db.scalar(
-        select(func.count()).select_from(Lead).where(Lead.is_high_value == True)
+        select(func.count()).select_from(Lead).where(Lead.is_high_value)
     )
 
     cats = await db.execute(
