@@ -83,8 +83,8 @@ Write 3 short paragraphs: intro, value prop with the service mentioned naturally
 
 async def send_email(to_email: str, subject: str, body: str) -> bool:
     if not SENDGRID_API_KEY:
-        logger.info(f"[DRY-RUN] To: {to_email} | Subject: {subject}")
-        return True
+        logger.warning(f"[DRY-RUN] SendGrid API key not configured. Email to {to_email} not actually sent.")
+        return False
 
     payload = {
         "personalizations": [{"to": [{"email": to_email}]}],

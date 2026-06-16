@@ -5,6 +5,7 @@ from sqlalchemy import select, func, desc
 from typing import Optional
 from app.database.session import get_db
 from app.database.models import Lead
+from app.middleware import verify_api_key
 
 router = APIRouter()
 
@@ -17,6 +18,7 @@ async def list_leads(
     category: Optional[str] = None,
     min_score: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
 ):
     query = select(Lead)
 
@@ -35,7 +37,10 @@ async def list_leads(
 
 
 @router.get("/stats")
-async def lead_stats(db: AsyncSession = Depends(get_db)):
+async def lead_stats(
+    db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
+):
     total = await db.scalar(select(func.count()).select_from(Lead))
     high_value = await db.scalar(
         select(func.count()).select_from(Lead).where(Lead.is_high_value == True)
@@ -54,7 +59,11 @@ async def lead_stats(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{lead_id}")
-async def get_lead(lead_id: str, db: AsyncSession = Depends(get_db)):
+async def get_lead(
+    lead_id: str,
+    db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
+):
     try:
         uid = UUID(lead_id)
     except ValueError:

@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends, Request
 from fastapi.responses import HTMLResponse
+from app.middleware import verify_api_key
 
 router = APIRouter()
 
 
 @router.get("/contacts")
-async def contacts_dashboard():
+async def contacts_dashboard(
+    request: Request,
+    _api_key: str = Depends(verify_api_key),
+):
     return HTMLResponse(PAGE)
 
 
@@ -52,6 +56,20 @@ tailwind.config = { theme: { extend: { colors: { gray: { 750: '#2d3748' } } } } 
     </header>
 
     <main class="max-w-7xl mx-auto px-4 py-4 flex-1 w-full">
+      <!-- API Key Modal -->
+      <div x-show="showApiKeyModal" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
+          <h2 class="text-xl font-bold text-yellow-400 mb-4">🔐 API Key Required</h2>
+          <p class="text-gray-400 mb-4 text-sm">Enter your API key to access the contact dashboard.</p>
+          <input type="password" x-model="apiKey" @keyup.enter="saveApiKey()" 
+            placeholder="Enter API key" 
+            class="w-full bg-gray-700 text-white rounded-lg px-4 py-2 border border-gray-600 mb-2 focus:outline-none focus:border-yellow-600">
+          <p x-show="apiKeyError" x-text="apiKeyError" class="text-red-400 text-sm mb-2"></p>
+          <button @click="saveApiKey()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-medium rounded-lg px-4 py-2 mt-2">
+            Save & Connect
+          </button>
+        </div>
+      </div>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <div class="bg-gray-800 rounded-xl px-4 py-3 border border-gray-700">
           <div class="text-xs text-gray-500 uppercase tracking-wide">Total</div>
@@ -184,6 +202,9 @@ function app() {
     leads: [], total: 0, online: false,
     search: '', catFilter: '', sourceFilter: '', contactFilter: '', minScore: '',
     sort: 'score', dir: 'desc',
+    apiKey: localStorage.getItem('api_key') || '',
+    showApiKeyModal: !localStorage.getItem('api_key'),
+    apiKeyError: '',
     catLabels: { ev_charger:'EV Charger', commercial_electrical:'Commercial', general_electrical:'General', solar_electrical:'Solar', generator:'Generator', lighting:'Lighting' },
     catColors: { ev_charger:'bg-yellow-900/50 text-yellow-300', commercial_electrical:'bg-blue-900/50 text-blue-300', general_electrical:'bg-gray-700 text-gray-300', solar_electrical:'bg-orange-900/50 text-orange-300', generator:'bg-purple-900/50 text-purple-300', lighting:'bg-green-900/50 text-green-300' },
 
@@ -230,6 +251,38 @@ function app() {
       a.click();
     },
 
+    async saveApiKey() {
+      if (!this.apiKey) {
+        this.apiKeyError = 'API key is required';
+        return;
+      }
+      localStorage.setItem('api_key', this.apiKey);
+      this.showApiKeyModal = false;
+      this.apiKeyError = '';
+      await this.loadData();
+    },
+
+    async loadData() {
+      if (!this.apiKey) return;
+      
+      const headers = { 'X-API-Key': this.apiKey };
+      
+      // Load leads
+      try {
+        const res = await fetch('/api/leads?limit=600', { headers });
+        if (res.status === 401 || res.status === 403) {
+          this.showApiKeyModal = true;
+          this.apiKeyError = 'Invalid API key';
+          return;
+        }
+        const d = await res.json();
+        this.leads = d.leads || [];
+        this.total = d.total || this.leads.length;
+      } catch(e) {
+        console.error('Failed to load leads:', e);
+      }
+    },
+
     init() {
       const ws = new WebSocket((location.protocol==='https:'?'wss:':'ws:') + '//' + location.hostname + ':8000/ws');
       ws.onopen = () => { this.online = true; };
@@ -241,10 +294,9 @@ function app() {
         } catch(_) {}
       };
 
-      fetch('/api/leads?limit=600').then(r => r.json()).then(d => {
-        this.leads = d.leads || [];
-        this.total = d.total || this.leads.length;
-      });
+      if (!this.showApiKeyModal) {
+        this.loadData();
+      }
     }
   };
 }

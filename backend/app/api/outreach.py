@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.database.session import get_db
 from app.database.models import OutreachDraft, Lead
+from app.middleware import verify_api_key
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -34,7 +35,11 @@ def serialize_draft(draft, lead=None):
 
 
 @router.get("/api/outreach/drafts")
-async def list_drafts(status: str | None = None, db: AsyncSession = Depends(get_db)):
+async def list_drafts(
+    status: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
+):
     query = select(OutreachDraft)
     if status:
         query = query.where(OutreachDraft.status == status)
@@ -50,7 +55,12 @@ async def list_drafts(status: str | None = None, db: AsyncSession = Depends(get_
 
 
 @router.patch("/api/outreach/drafts/{draft_id}")
-async def update_draft(draft_id: str, update: DraftUpdate, db: AsyncSession = Depends(get_db)):
+async def update_draft(
+    draft_id: str,
+    update: DraftUpdate,
+    db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
+):
     try:
         uid = UUID(draft_id)
     except ValueError:
@@ -75,7 +85,11 @@ async def update_draft(draft_id: str, update: DraftUpdate, db: AsyncSession = De
 
 
 @router.post("/api/outreach/drafts/{draft_id}/approve")
-async def approve_draft(draft_id: str, db: AsyncSession = Depends(get_db)):
+async def approve_draft(
+    draft_id: str,
+    db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
+):
     try:
         uid = UUID(draft_id)
     except ValueError:
@@ -92,7 +106,10 @@ async def approve_draft(draft_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/api/outreach/send-batch")
-async def send_batch(db: AsyncSession = Depends(get_db)):
+async def send_batch(
+    db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
+):
     from app.outreach.engine import send_email
 
     result = await db.execute(

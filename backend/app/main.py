@@ -9,6 +9,7 @@ from app.database.models import Lead
 from app.api import leads, dashboard, scrape, ws, contacts, outreach
 from app.rag import router as rag_router
 from app.rag import memory
+from app.middleware.rate_limit import RateLimiter
 from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
@@ -40,11 +41,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
+# Add rate limiting middleware (100 requests per minute per IP)
+app.add_middleware(RateLimiter, calls=100, period=60)
+
+# CORS - only allow configured origins (never allow all with credentials)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 
