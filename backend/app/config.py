@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    database_url: str = "postgresql+asyncpg://leadagent:leadagent_secret_2026@localhost:5433/leadagent"
+    database_url: str = ""
     redis_url: str = "redis://localhost:6379/0"
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2:latest"
@@ -11,8 +11,9 @@ class Settings(BaseSettings):
     sendgrid_from_email: str = ""
     permit_api_base: str = "https://data.lacity.org/resource/hbkd-qubn.json"
     app_name: str = "Amy Electric Lead Agent"
-    debug: bool = True
+    debug: bool = False
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8000", "http://localhost"]
+    api_key: str = ""  # Required for API authentication
 
     tier1_zips: list[str] = [
         "91367", "91302", "91316", "91436", "91403", "91423", "90210"

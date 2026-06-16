@@ -1,14 +1,33 @@
 import logging
+from datetime import datetime, timezone
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 from app.database.session import get_db
 from app.database.models import OutreachDraft, Lead
+from app.middleware import verify_api_key
+from app.outreach.engine import send_email
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _validate_uuid(value: str) -> UUID:
+    """Validate and parse a UUID string."""
+    try:
+        return UUID(value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ID format")
+
+
+async def _get_leads_map(db: AsyncSession, lead_ids: list[UUID]) -> dict[str, Lead]:
+    """Fetch leads by IDs and return as a string-keyed dict."""
+    if not lead_ids:
+        return {}
+    result = await db.execute(select(Lead).where(Lead.id.in_(lead_ids)))
+    return {str(l.id): l for l in result.scalars().all()}
 
 
 class DraftUpdate(BaseModel):
@@ -34,7 +53,11 @@ def serialize_draft(draft, lead=None):
 
 
 @router.get("/api/outreach/drafts")
-async def list_drafts(status: str | None = None, db: AsyncSession = Depends(get_db)):
+async def list_drafts(
+    status: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
+):
     query = select(OutreachDraft)
     if status:
         query = query.where(OutreachDraft.status == status)
@@ -43,18 +66,19 @@ async def list_drafts(status: str | None = None, db: AsyncSession = Depends(get_
     drafts = result.scalars().all()
 
     lead_ids = [d.lead_id for d in drafts]
-    leads_result = await db.execute(select(Lead).where(Lead.id.in_(lead_ids)))
-    leads_map = {str(l.id): l for l in leads_result.scalars().all()}
+    leads_map = await _get_leads_map(db, lead_ids)
 
     return {"drafts": [serialize_draft(d, leads_map.get(str(d.lead_id))) for d in drafts]}
 
 
 @router.patch("/api/outreach/drafts/{draft_id}")
-async def update_draft(draft_id: str, update: DraftUpdate, db: AsyncSession = Depends(get_db)):
-    try:
-        uid = UUID(draft_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid draft ID format")
+async def update_draft(
+    draft_id: str,
+    update: DraftUpdate,
+    db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
+):
+    uid = _validate_uuid(draft_id)
 
     result = await db.execute(select(OutreachDraft).where(OutreachDraft.id == uid))
     draft = result.scalar_one_or_none()
@@ -67,19 +91,20 @@ async def update_draft(draft_id: str, update: DraftUpdate, db: AsyncSession = De
         draft.body = update.body
     draft.status = "pending_review"
 
-    lead_result = await db.execute(select(Lead).where(Lead.id == draft.lead_id))
-    lead = lead_result.scalar_one_or_none()
+    leads_map = await _get_leads_map(db, [draft.lead_id])
+    lead = leads_map.get(str(draft.lead_id))
 
     await db.commit()
     return {"ok": True, "draft": serialize_draft(draft, lead)}
 
 
 @router.post("/api/outreach/drafts/{draft_id}/approve")
-async def approve_draft(draft_id: str, db: AsyncSession = Depends(get_db)):
-    try:
-        uid = UUID(draft_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid draft ID format")
+async def approve_draft(
+    draft_id: str,
+    db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
+):
+    uid = _validate_uuid(draft_id)
 
     result = await db.execute(select(OutreachDraft).where(OutreachDraft.id == uid))
     draft = result.scalar_one_or_none()
@@ -92,9 +117,10 @@ async def approve_draft(draft_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/api/outreach/send-batch")
-async def send_batch(db: AsyncSession = Depends(get_db)):
-    from app.outreach.engine import send_email
-
+async def send_batch(
+    db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
+):
     result = await db.execute(
         select(OutreachDraft).where(OutreachDraft.status == "approved")
     )
@@ -103,8 +129,7 @@ async def send_batch(db: AsyncSession = Depends(get_db)):
         return {"sent": 0, "failed": 0, "message": "No approved drafts"}
 
     lead_ids = [d.lead_id for d in drafts]
-    leads_result = await db.execute(select(Lead).where(Lead.id.in_(lead_ids)))
-    leads_map = {str(l.id): l for l in leads_result.scalars().all()}
+    leads_map = await _get_leads_map(db, lead_ids)
 
     sent = 0
     failed = 0
@@ -119,11 +144,8 @@ async def send_batch(db: AsyncSession = Depends(get_db)):
             ok = await send_email(lead.email, draft.subject, draft.body)
             if ok:
                 draft.status = "sent"
-                extra = lead.extra_data or {}
-                if isinstance(extra, str):
-                    extra = {}
+                extra = lead.extra_data if isinstance(lead.extra_data, dict) else {}
                 outreach = extra.get("outreach", {})
-                from datetime import datetime, timezone
                 outreach.update({
                     "status": "sent",
                     "sent_at": datetime.now(timezone.utc).isoformat(),
@@ -137,10 +159,15 @@ async def send_batch(db: AsyncSession = Depends(get_db)):
             else:
                 draft.status = "failed"
                 failed += 1
-        except Exception as e:
+        except Exception:
             logger.exception(f"Failed to send draft {draft.id}")
             draft.status = "failed"
             failed += 1
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        logger.error("Failed to commit send_batch changes")
+        return {"sent": sent, "failed": failed, "error": "Database commit failed"}
+
     return {"sent": sent, "failed": failed}

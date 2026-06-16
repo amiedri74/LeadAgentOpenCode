@@ -5,6 +5,7 @@ from sqlalchemy import select, func, desc
 from typing import Optional
 from app.database.session import get_db
 from app.database.models import Lead
+from app.middleware import verify_api_key
 
 router = APIRouter()
 
@@ -17,6 +18,7 @@ async def list_leads(
     category: Optional[str] = None,
     min_score: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
 ):
     query = select(Lead)
 
@@ -27,7 +29,16 @@ async def list_leads(
     if min_score is not None:
         query = query.where(Lead.score >= min_score)
 
-    total = await db.scalar(select(func.count()).select_from(query.subquery()))
+    # Count with same filters
+    count_query = select(func.count()).select_from(Lead)
+    if source:
+        count_query = count_query.where(Lead.source == source)
+    if category:
+        count_query = count_query.where(Lead.service_category == category)
+    if min_score is not None:
+        count_query = count_query.where(Lead.score >= min_score)
+    total = await db.scalar(count_query)
+
     result = await db.execute(query.order_by(desc(Lead.score)).offset(skip).limit(limit))
     leads = result.scalars().all()
 
@@ -35,10 +46,13 @@ async def list_leads(
 
 
 @router.get("/stats")
-async def lead_stats(db: AsyncSession = Depends(get_db)):
+async def lead_stats(
+    db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
+):
     total = await db.scalar(select(func.count()).select_from(Lead))
     high_value = await db.scalar(
-        select(func.count()).select_from(Lead).where(Lead.is_high_value == True)
+        select(func.count()).select_from(Lead).where(Lead.is_high_value)
     )
 
     cats = await db.execute(
@@ -54,7 +68,11 @@ async def lead_stats(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{lead_id}")
-async def get_lead(lead_id: str, db: AsyncSession = Depends(get_db)):
+async def get_lead(
+    lead_id: str,
+    db: AsyncSession = Depends(get_db),
+    _api_key: str = Depends(verify_api_key),
+):
     try:
         uid = UUID(lead_id)
     except ValueError:
